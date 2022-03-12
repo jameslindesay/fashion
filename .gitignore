@@ -1,0 +1,6 @@
+fashion_data/fashion-mnist_test.csv
+fashion_data/t10k-images-idx3-ubyte
+fashion_data/t10k-labels-idx1-ubyte
+fashion_data/fashion-mnist_train.csv
+fashion_data/train-images-idx3-ubyte
+fashion_data/train-labels-idx1-ubyte
