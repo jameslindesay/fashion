@@ -12,14 +12,9 @@
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import random
 from tqdm import tqdm
-
-
-input_size = 784
-h1_size = 392
-h2_size = 196
-output_size = 10
-learning_rate = 0.001
 
 
 def read_data():
@@ -81,15 +76,16 @@ def classify(output_vector):
     classification_probability = np.amax(output_vector)
     return classification, classification_probability
 
+
 ### BACKPROPAGATION
 # Resource 1: https://doug919.github.io/notes-on-backpropagation-with-cross-entropy/
 # Resource 2: https://github.com/JohnPaton/numpy-neural-networks/blob/master/02-multi-layer-perceptron.ipynb
 
 
-def backpropagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases, learning_rate):
+def backpropagate(input_with_target, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
     input_vector = input_with_target[0]
     target_index = input_with_target[1]
-    target_vector = np.zeros((output_size, 1))
+    target_vector = np.zeros((output_biases.shape[0], 1))
     target_vector[target_index] = 1
 
     h1_z = np.dot(input_h1_weights, input_vector) + h1_biases # 392 * 1
@@ -114,14 +110,15 @@ def backpropagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_
     return input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases
 
 
-def train(indices, df, epochs, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
+def train(train_size, df, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
     losses = [0] * epochs
     accuracies = [0] * epochs
     for epoch in tqdm(range(epochs), desc = "Epochs"):
         loss = 0
-        corrects = [0] * indices
-        for index in range(indices):
-            input_with_target = mnist_row_to_input(df, index)
+        corrects = [0] * train_size
+        indices = random.sample(range(0, len(df)), train_size)
+        for index in range(len(indices)):
+            input_with_target = mnist_row_to_input(df, indices[index])
             output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
             error = cat_cross_loss(output_vector, input_with_target[1])
             loss += error
@@ -129,24 +126,47 @@ def train(indices, df, epochs, input_h1_weights, h1_h2_weights, h2_output_weight
                 corrects[index] = 1
             else:
                 corrects[index] = 0
-            input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = backpropagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases, learning_rate)
+            input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = backpropagate(input_with_target, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
         losses[epoch] = loss
         accuracies[epoch] = sum(corrects)/len(corrects)
     return losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases
 
+def plot_loss_accu(epochs, losses, accuracies):
+    ax = plt.gca()
+    ax2 = plt.twinx()
+    ax.plot(range(epochs), losses, 'b')
+    ax2.plot(range(epochs), accuracies, 'r')
+    ax.set_ylabel("Loss", fontsize = 14, color = 'r')
+    ax2.set_ylabel("Accuracy", fontsize = 14, color = 'b')
+    ax.set_xlabel("Epoch", fontsize = 14, color = 'black')
+    plt.title("Loss & Accuracy by Epoch", fontsize = 20, color = 'black')
+    plt.show()
+
 
 def main():
+    input_size = 784
+    h1_size = 100
+    h2_size = 100
+    output_size = 10
+    learning_rate = 1e-4
+    
     print("Loading data...")
     df_train, df_test = read_data()
     print("Data loaded!")
     input_h1_weights, h1_h2_weights, h2_output_weights = initialise_weights(input_size, h1_size, h2_size, output_size)
     h1_biases, h2_biases, output_biases = initialise_biases(h1_size, h2_size, output_size)
+
+    train_size = 10000
+    epochs = 10
+    losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = train(train_size, df_train, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
     
-    indices = 100
-    epochs = 100
-    losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = train(indices, df_train, epochs, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
-    print(losses)
-    print(accuracies)
+    # Plot loss and accuracy over epochs
+    plot_loss_accu(epochs, losses, accuracies)
+
+    input_with_target = mnist_row_to_input(df_test, 0)
+    output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+    print(np.argmax(output_vector))
+    print(input_with_target[1])
 
 if __name__ == '__main__':
     main()
