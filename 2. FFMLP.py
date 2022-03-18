@@ -144,11 +144,13 @@ def plot_loss_accu(epochs, losses, accuracies):
 
 
 def main():
-    input_size = 784
-    h1_size = 100
+    input_size = 784 # DO NOT CHANGE
+    h1_size = 1563
     h2_size = 100
-    output_size = 10
+    output_size = 10 # DO NOT CHANGE
     learning_rate = 1e-4
+    train_size = 1000
+    epochs = 100
     
     print("Loading data...")
     df_train, df_test = read_data()
@@ -156,17 +158,24 @@ def main():
     input_h1_weights, h1_h2_weights, h2_output_weights = initialise_weights(input_size, h1_size, h2_size, output_size)
     h1_biases, h2_biases, output_biases = initialise_biases(h1_size, h2_size, output_size)
 
-    train_size = 10000
-    epochs = 10
     losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = train(train_size, df_train, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
     
     # Plot loss and accuracy over epochs
     plot_loss_accu(epochs, losses, accuracies)
+    print("Final loss: " + str(losses[-1][0]))
+    print("Final loss: " + str(accuracies[-1]))
 
-    input_with_target = mnist_row_to_input(df_test, 0)
-    output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
-    print(np.argmax(output_vector))
-    print(input_with_target[1])
+    # input_with_target = mnist_row_to_input(df_test, 0)
+    # output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+    # print(np.argmax(output_vector))
+    # print(input_with_target[1])
+
+    np.savetxt("out/input_h1_weights.csv", input_h1_weights, delimiter = ',')
+    np.savetxt("out/h1_h2_weights.csv", h1_h2_weights, delimiter = ',')
+    np.savetxt("out/h2_output_weights.csv", h2_output_weights, delimiter = ',')
+    np.savetxt("out/input_h1_biases.csv", input_h1_weights, delimiter = ',')
+    np.savetxt("out/h1_h2_biases.csv", h1_h2_weights, delimiter = ',')
+    np.savetxt("out/h2_output_biases.csv", h2_output_weights, delimiter = ',')
 
 if __name__ == '__main__':
     main()
