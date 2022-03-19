@@ -6,7 +6,7 @@
 
 # Planning:
 # 28*28 grid input = 784 nodes in input layer.
-# I will use 2 hidden layers, the first with 392 nodes and the second with 196 nodes.
+# I will use 2 hidden layers, the first with many nodes and the second with fewer nodes.
 # The output layer has 10 nodes; one for each classification of clothing.
 
 
@@ -21,28 +21,34 @@ def read_data():
     return pd.read_csv('fashion_data/fashion-mnist_train.csv'), pd.read_csv('fashion_data/fashion-mnist_test.csv')
 
 
-# Leaky ReLu Activation
+# Leaky ReLU activation
 def relu(z):
     return np.where(z > 0, z, 0.01 * z)
 
 
+# Derivative of leaky ReLU activation
 def relu_deriv(z):
     return np.where(z > 0, 1, 0.01)
 
 
+# Softmax for output layer
 def softmax(vector):
     e = np.exp(vector - np.max(vector))
     return e / e.sum()
 
 
+# Categorical cross entropy loss function
 def cat_cross_loss(output_vector, target_index):
     return -(np.log(output_vector[target_index] + 1e-100))
 
 
+# Derivative of categorical cross entropy loss function
 def cat_cross_loss_deriv(output_vector, target_index):
     return -1 / output_vector[target_index]
 
 
+# Initialise NN weights to random standard normal values scaled by the size of the layers
+# Scaling source: https://mlfromscratch.com/neural-network-tutorial/
 def initialise_weights(input_size, h1_size, h2_size, output_size):
     input_h1_weights = np.random.randn(h1_size, input_size) * np.sqrt(1 / h1_size)
     h1_h2_weights = np.random.randn(h2_size, h1_size) * np.sqrt(1 / h2_size)
@@ -50,6 +56,7 @@ def initialise_weights(input_size, h1_size, h2_size, output_size):
     return input_h1_weights, h1_h2_weights, h2_output_weights
 
 
+# Initialise NN biases to random standard normal values
 def initialise_biases(h1_size, h2_size, output_size):
     h1_biases = np.random.randn(h1_size, 1)
     h2_biases = np.random.randn(h2_size, 1)
@@ -57,8 +64,9 @@ def initialise_biases(h1_size, h2_size, output_size):
     return h1_biases, h2_biases, output_biases
 
 
+# Convert a pd df to a numpy array of the data with its target
 def mnist_row_to_input(df, row):
-    return np.array(df.iloc[row].values.tolist()[1:], ndmin=2).T, df.iloc[row][0]
+    return (np.array(df.iloc[row].values.tolist()[1:], ndmin=2).T, df.iloc[row][0])
 
 
 # Runs a forward pass using input data (no classification), weights, and biases
@@ -77,11 +85,9 @@ def classify(output_vector):
     return classification, classification_probability
 
 
-### BACKPROPAGATION
+# Runs backpropagation
 # Resource 1: https://doug919.github.io/notes-on-backpropagation-with-cross-entropy/
 # Resource 2: https://github.com/JohnPaton/numpy-neural-networks/blob/master/02-multi-layer-perceptron.ipynb
-
-
 def backpropagate(input_with_target, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
     input_vector = input_with_target[0]
     target_index = input_with_target[1]
@@ -110,6 +116,7 @@ def backpropagate(input_with_target, learning_rate, input_h1_weights, h1_h2_weig
     return input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases
 
 
+# Trains the network for a defined number of epochs and with batches of a defined size
 def train(train_size, df, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
     losses = [0] * epochs
     accuracies = [0] * epochs
@@ -133,22 +140,21 @@ def train(train_size, df, epochs, learning_rate, input_h1_weights, h1_h2_weights
     return losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases
 
 
+# Runs a test pass on the network (similar to the training function)
 def test(df, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
-    loss = 0
     corrects = [0] * len(df)
     for index in range(len(df)):
         input_with_target = mnist_row_to_input(df, index)
         output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
-        error = cat_cross_loss(output_vector, input_with_target[1])
-        loss += error
         if np.argmax(output_vector) == input_with_target[1]:
             corrects[index] = 1
         else:
             corrects[index] = 0
     accuracy = sum(corrects)/len(corrects)
-    return loss, accuracy
+    return accuracy
 
 
+# Plot the loss and accuracy over epochs on the same graph
 def plot_loss_accu(epochs, losses, accuracies):
     ax = plt.gca()
     ax2 = plt.twinx()
@@ -167,7 +173,7 @@ def main():
     h2_size = 100
     output_size = 10 # DO NOT CHANGE
     learning_rate = 1e-5
-    train_size = 50000
+    train_size = 1000
     epochs = 10
     
     print("Loading data...")
@@ -184,22 +190,18 @@ def main():
     print("\nFinal training epoch loss: " + str(losses[-1][0]))
     print("Final training epoch accuracy: " + str(accuracies[-1]))
 
-    # input_with_target = mnist_row_to_input(df_test, 0)
-    # output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
-    # print(np.argmax(output_vector))
-    # print(input_with_target[1])
+    print("\nRunning test...")
+    accuracy = test(df_test, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
 
-    loss, accuracy = test(df_test, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
-
-    print("\nTest set loss: " + str(loss))
     print("Test set accuracy: " + str(accuracy))
 
+    print("\nSaving weights/biases")
     np.savetxt("out/input_h1_weights.csv", input_h1_weights, delimiter = ',')
     np.savetxt("out/h1_h2_weights.csv", h1_h2_weights, delimiter = ',')
     np.savetxt("out/h2_output_weights.csv", h2_output_weights, delimiter = ',')
-    np.savetxt("out/input_h1_biases.csv", input_h1_weights, delimiter = ',')
-    np.savetxt("out/h1_h2_biases.csv", h1_h2_weights, delimiter = ',')
-    np.savetxt("out/h2_output_biases.csv", h2_output_weights, delimiter = ',')
+    np.savetxt("out/h1_biases.csv", h1_biases, delimiter = ',')
+    np.savetxt("out/h2_biases.csv", h2_biases, delimiter = ',')
+    np.savetxt("out/output_biases.csv", output_biases, delimiter = ',')
 
 
 if __name__ == '__main__':

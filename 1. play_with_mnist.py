@@ -10,7 +10,7 @@ import numpy as np
 import random
 
 # import data
-mnist = MNIST('data')
+mnist = MNIST('fashion_data')
 images, labels = mnist.load_training()
 
 # choose image to show
