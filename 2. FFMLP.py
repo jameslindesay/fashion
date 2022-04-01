@@ -118,6 +118,11 @@ def backpropagate(input_with_target, learning_rate, input_h1_weights, h1_h2_weig
 
 # Trains the network for a defined number of epochs and with batches of a defined size
 def train(train_size, df, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
+    
+    # TODO for each epoch it should train on full dataset, within each epoch it can train on subset of data...
+    # TODO backpropagate once per batch rather than once per index (using average error)
+    # TODO change loss to average rather than sum, then include loss in test function
+
     losses = [0] * epochs
     accuracies = [0] * epochs
     # for epoch in tqdm(range(epochs), desc = "Epoch"):
@@ -173,11 +178,12 @@ def main():
     h2_size = 100
     output_size = 10 # DO NOT CHANGE
     learning_rate = 1e-5
-    train_size = 1000
+    train_size = 5000
     epochs = 10
     
     print("Loading data...")
     df_train, df_test = read_data()
+    print(max(mnist_row_to_input(df_train, 1)[0]))
     print("Data loaded!\n")
     input_h1_weights, h1_h2_weights, h2_output_weights = initialise_weights(input_size, h1_size, h2_size, output_size)
     h1_biases, h2_biases, output_biases = initialise_biases(h1_size, h2_size, output_size)

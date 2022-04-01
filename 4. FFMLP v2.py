@@ -1,0 +1,215 @@
+# --------------------------------------------------------------------------- #
+# FILE:     FFMLP.py                                                          #
+#                                                                             #
+# PURPOSE:  create feedforward multilayer perceptron                          #
+# UPGRADE:  fixes batches and implemntation of training                       #
+# --------------------------------------------------------------------------- #
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import random
+from tqdm import tqdm
+
+
+def read_data():
+    return pd.read_csv('fashion_data/fashion-mnist_train.csv'), pd.read_csv('fashion_data/fashion-mnist_test.csv')
+
+
+# Leaky ReLU activation
+def relu(z):
+    return np.where(z > 0, z, 0.01 * z)
+
+
+# Derivative of leaky ReLU activation
+def relu_deriv(z):
+    return np.where(z > 0, 1, 0.01)
+
+
+# Softmax for output layer
+def softmax(vector):
+    e = np.exp(vector - np.max(vector))
+    return e / e.sum()
+
+
+# Categorical cross entropy loss function
+def cat_cross_loss(output_matrix, targets):
+    loss = 0
+    for col in range(output_matrix.shape[1]):
+        loss -= np.log(output_matrix[targets[0][col],col] + 1e-100)
+    return loss
+
+
+# Initialise NN weights to random standard normal values scaled by the size of the layers
+# Scaling source: https://mlfromscratch.com/neural-network-tutorial/
+def initialise_weights(input_size, h1_size, h2_size, output_size):
+    input_h1_weights = np.random.randn(h1_size, input_size) * np.sqrt(1 / h1_size)
+    h1_h2_weights = np.random.randn(h2_size, h1_size) * np.sqrt(1 / h2_size)
+    h2_output_weights = np.random.randn(output_size, h2_size) * np.sqrt(1 / output_size)
+    return input_h1_weights, h1_h2_weights, h2_output_weights
+
+
+# Initialise NN biases to random standard normal values
+def initialise_biases(h1_size, h2_size, output_size):
+    h1_biases = np.random.randn(h1_size, 1)
+    h2_biases = np.random.randn(h2_size, 1)
+    output_biases = np.random.randn(output_size, 1)
+    return h1_biases, h2_biases, output_biases
+
+
+# Convert a pd df to a numpy array of the data with targets
+def mnist_row_to_input(df, rows):
+    return np.array(df.iloc[rows,1:].values.tolist(), ndmin=2).T, np.array(df.iloc[rows,0].values.tolist(), ndmin=2)
+
+
+# Runs a forward pass using input data (no classification), weights, and biases
+def forward_propagate(input_matrix, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
+    h1_matrix = relu(np.dot(input_h1_weights, input_matrix) + np.tile(h1_biases, input_matrix.shape[1]))
+    h2_matrix = relu(np.dot(h1_h2_weights, h1_matrix) + np.tile(h2_biases, h1_matrix.shape[1]))
+    output_matrix = softmax(np.dot(h2_output_weights, h2_matrix) + np.tile(output_biases, h2_matrix.shape[1]))
+    return output_matrix
+
+
+# Returns classification, classified probability
+def classify(output_matrix):
+    classification = np.argmax(output_matrix, axis = 0)
+    classification_probability = np.amax(output_matrix, axis = 0)
+    return classification, classification_probability
+
+
+# Runs backpropagation
+# Resource 1: https://doug919.github.io/notes-on-backpropagation-with-cross-entropy/
+# Resource 2: https://github.com/JohnPaton/numpy-neural-networks/blob/master/02-multi-layer-perceptron.ipynb
+def backpropagate(input_matrix, targets, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
+    target_matrix = np.zeros((output_biases.shape[0], input_matrix.shape[1]))
+    for index in range(input_matrix.shape[1]):
+        target_matrix[targets[0][index]][index] = 1
+
+    h1_z = np.dot(input_h1_weights, input_matrix) + np.tile(h1_biases, input_matrix.shape[1]) # h1_size * batch_size
+    h1_a = relu(h1_z) # h1_size * batch_size
+    h2_z = np.dot(h1_h2_weights, h1_a) + np.tile(h2_biases, h1_a.shape[1]) # h2_size * batch_size
+    h2_a = relu(h2_z) # h2_size * batch_size
+    output_z = np.dot(h2_output_weights, h2_a) + np.tile(output_biases, h2_a.shape[1]) # output_size * batch size
+    output_a = softmax(output_z) # output_size * batch size
+
+    output_delta_total = np.zeros((1, output_biases.shape[0]))
+    h2_delta_total = np.zeros((1, h2_biases.shape[0]))
+    h1_delta_total = np.zeros((1, h1_biases.shape[0]))
+    output_delta_a = np.zeros((output_biases.shape[0], h2_biases.shape[0]))
+    h2_delta_a = np.zeros((h2_biases.shape[0], h1_biases.shape[0]))
+    h1_delta_a = np.zeros((h1_biases.shape[0], input_matrix.shape[0]))
+
+    # TODO Improve this?
+    for col in range(input_matrix.shape[1]):
+        output_delta = (output_a[:,[col]] - target_matrix[:,[col]]).T # 1 * output_size
+        h2_delta = np.dot(output_delta, h2_output_weights) * relu_deriv(h2_z[:,[col]]).T # 1 * h2_size
+        h1_delta = np.dot(h2_delta, h1_h2_weights) * relu_deriv(h1_z[:,[col]]).T # 1 * h1_size
+        output_delta_a += np.multiply(output_delta.T, h2_a[:,[col]].T)
+        h2_delta_a += np.multiply(h2_delta.T, h1_a[:,[col]].T)
+        h1_delta_a += np.multiply(h1_delta.T, input_matrix[:,[col]].T)
+        output_delta_total += output_delta
+        h2_delta_total += h2_delta
+        h1_delta_total += h1_delta
+    
+    h2_output_weights -= learning_rate * 1/input_matrix.shape[1] * output_delta_a # output_size * h2_size
+    h1_h2_weights -= learning_rate * 1/input_matrix.shape[1] * h2_delta_a # h2_size * h1_size
+    input_h1_weights -= learning_rate * 1/input_matrix.shape[1] * h1_delta_a # h1_size * input_size
+
+    output_biases -= learning_rate * output_delta_total.T * 1/input_matrix.shape[1]
+    h2_biases -= learning_rate * h2_delta_total.T * 1/input_matrix.shape[1]
+    h1_biases -= learning_rate * h1_delta_total.T * 1/input_matrix.shape[1]
+
+    return input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases
+
+
+# Trains the network for a defined number of epochs and with batches of a defined size
+def train(batch_size, df, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
+    
+    # TODO change loss to average rather than sum, then include loss in test function
+
+    losses = [0] * epochs
+    accuracies = [0] * epochs
+    for epoch in range(epochs):
+        loss = 0
+        corrects = 0
+        for batch_no in tqdm(range(df.shape[0] // batch_size), desc="Batch Number"):
+            input_matrix, targets = mnist_row_to_input(df, range(batch_no * batch_size, (batch_no + 1) * batch_size))
+            output_matrix = forward_propagate(input_matrix, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+            error = cat_cross_loss(output_matrix, targets)
+            loss += error
+            for col in range(output_matrix.shape[1]):
+                if np.argmax(output_matrix[:,[col]]) == targets[0][col]:
+                    corrects += 1
+            input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = backpropagate(input_matrix, targets, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+        losses[epoch] = loss
+        accuracies[epoch] = corrects/df.shape[0]
+    return losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases
+
+
+# Runs a test pass on the network (similar to the training function)
+# def test(df, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
+#     corrects = [0] * len(df)
+#     for index in range(len(df)):
+#         input_with_target = mnist_row_to_input(df, index)
+#         output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+#         if np.argmax(output_vector) == input_with_target[1]:
+#             corrects[index] = 1
+#         else:
+#             corrects[index] = 0
+#     accuracy = sum(corrects)/len(corrects)
+#     return accuracy
+
+
+# Plot the loss and accuracy over epochs on the same graph
+def plot_loss_accu(epochs, losses, accuracies):
+    ax = plt.gca()
+    ax2 = plt.twinx()
+    ax.plot(range(epochs), losses, 'b')
+    ax2.plot(range(epochs), accuracies, 'r')
+    ax.set_ylabel("Loss", fontsize = 14, color = 'r')
+    ax2.set_ylabel("Accuracy", fontsize = 14, color = 'b')
+    ax.set_xlabel("Epoch", fontsize = 14, color = 'black')
+    plt.title("Loss & Accuracy by Epoch", fontsize = 20, color = 'black')
+    plt.show()
+
+
+def main():
+    input_size = 784 # DO NOT CHANGE
+    h1_size = 1000
+    h2_size = 100
+    output_size = 10 # DO NOT CHANGE
+    learning_rate = 1e-5
+    batch_size = 50
+    epochs = 2
+    
+    print("Loading data...")
+    df_train, df_test = read_data()
+    print("Data loaded!\n")
+    input_h1_weights, h1_h2_weights, h2_output_weights = initialise_weights(input_size, h1_size, h2_size, output_size)
+    h1_biases, h2_biases, output_biases = initialise_biases(h1_size, h2_size, output_size)
+    print("Training...")
+    losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = train(batch_size, df_train, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+    
+    # Plot loss and accuracy over epochs
+    plot_loss_accu(epochs, losses, accuracies)
+    print("\nFinal training epoch loss: " + str(losses[-1]))
+    print("Final training epoch accuracy: " + str(accuracies[-1]))
+
+    print("\nRunning test...")
+    # accuracy = test(df_test, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+
+    # print("Test set accuracy: " + str(accuracy))
+
+    print("\nSaving weights/biases...")
+    np.savetxt("out/input_h1_weights.csv", input_h1_weights, delimiter = ',')
+    np.savetxt("out/h1_h2_weights.csv", h1_h2_weights, delimiter = ',')
+    np.savetxt("out/h2_output_weights.csv", h2_output_weights, delimiter = ',')
+    np.savetxt("out/h1_biases.csv", h1_biases, delimiter = ',')
+    np.savetxt("out/h2_biases.csv", h2_biases, delimiter = ',')
+    np.savetxt("out/output_biases.csv", output_biases, delimiter = ',')
+    print("Saved!\n")
+
+
+if __name__ == '__main__':
+    main()
