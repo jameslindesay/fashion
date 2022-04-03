@@ -28,9 +28,11 @@ def relu_deriv(z):
 
 
 # Softmax for output layer
-def softmax(vector):
-    e = np.exp(vector - np.max(vector))
-    return e / e.sum()
+def softmax(matrix):
+    col_max = np.max(matrix, axis = 0, keepdims = True)
+    e = np.exp(matrix - col_max)
+    col_sum = np.sum(e, axis = 0, keepdims = True)
+    return e / col_sum
 
 
 # Categorical cross entropy loss function
@@ -59,7 +61,7 @@ def initialise_biases(h1_size, h2_size, output_size):
 
 
 # Convert a pd df to a numpy array of the data with targets
-def mnist_row_to_input(df, rows):
+def ingest_mnist(df, rows):
     return np.array(df.iloc[rows,1:].values.tolist(), ndmin=2).T, np.array(df.iloc[rows,0].values.tolist(), ndmin=2)
 
 
@@ -69,13 +71,6 @@ def forward_propagate(input_matrix, input_h1_weights, h1_h2_weights, h2_output_w
     h2_matrix = relu(np.dot(h1_h2_weights, h1_matrix) + np.tile(h2_biases, h1_matrix.shape[1]))
     output_matrix = softmax(np.dot(h2_output_weights, h2_matrix) + np.tile(output_biases, h2_matrix.shape[1]))
     return output_matrix
-
-
-# Returns classification, classified probability
-def classify(output_matrix):
-    classification = np.argmax(output_matrix, axis = 0)
-    classification_probability = np.amax(output_matrix, axis = 0)
-    return classification, classification_probability
 
 
 # Runs backpropagation
@@ -124,49 +119,34 @@ def backpropagate(input_matrix, targets, learning_rate, input_h1_weights, h1_h2_
 
 
 # Trains the network for a defined number of epochs and with batches of a defined size
-def train(batch_size, df, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
-    
-    # TODO change loss to average rather than sum, then include loss in test function
-
+def train(batch_size, df_train, df_test, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
     losses = [0] * epochs
     accuracies = [0] * epochs
     for epoch in range(epochs):
-        loss = 0
-        corrects = 0
-        for batch_no in tqdm(range(df.shape[0] // batch_size), desc="Batch Number"):
-            input_matrix, targets = mnist_row_to_input(df, range(batch_no * batch_size, (batch_no + 1) * batch_size))
-            output_matrix = forward_propagate(input_matrix, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
-            error = cat_cross_loss(output_matrix, targets)
-            loss += error
-            for col in range(output_matrix.shape[1]):
-                if np.argmax(output_matrix[:,[col]]) == targets[0][col]:
-                    corrects += 1
+        for batch_no in tqdm(range(df_train.shape[0] // batch_size), desc="Epoch " + str(epoch)):
+            input_matrix, targets = ingest_mnist(df_train, range(batch_no * batch_size, (batch_no + 1) * batch_size))
             input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = backpropagate(input_matrix, targets, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+        loss, accuracy = test(df_test, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
         losses[epoch] = loss
-        accuracies[epoch] = corrects/df.shape[0]
+        accuracies[epoch] = accuracy
     return losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases
 
 
-# Runs a test pass on the network (similar to the training function)
-# def test(df, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
-#     corrects = [0] * len(df)
-#     for index in range(len(df)):
-#         input_with_target = mnist_row_to_input(df, index)
-#         output_vector = forward_propagate(input_with_target, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
-#         if np.argmax(output_vector) == input_with_target[1]:
-#             corrects[index] = 1
-#         else:
-#             corrects[index] = 0
-#     accuracy = sum(corrects)/len(corrects)
-#     return accuracy
+def test(df, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases):
+    accuracy = 0
+    input_matrix, targets = ingest_mnist(df, range(len(df)))
+    output_matrix = forward_propagate(input_matrix, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+    loss = cat_cross_loss(output_matrix, targets)
+    accuracy = np.sum(np.argmax(output_matrix, axis = 0) == targets)/len(df)
+    return(loss, accuracy)
 
 
 # Plot the loss and accuracy over epochs on the same graph
 def plot_loss_accu(epochs, losses, accuracies):
     ax = plt.gca()
     ax2 = plt.twinx()
-    ax.plot(range(epochs), losses, 'b')
-    ax2.plot(range(epochs), accuracies, 'r')
+    ax.plot(range(epochs), losses, 'r')
+    ax2.plot(range(epochs), accuracies, 'b')
     ax.set_ylabel("Loss", fontsize = 14, color = 'r')
     ax2.set_ylabel("Accuracy", fontsize = 14, color = 'b')
     ax.set_xlabel("Epoch", fontsize = 14, color = 'black')
@@ -189,12 +169,12 @@ def main():
     input_h1_weights, h1_h2_weights, h2_output_weights = initialise_weights(input_size, h1_size, h2_size, output_size)
     h1_biases, h2_biases, output_biases = initialise_biases(h1_size, h2_size, output_size)
     print("Training...")
-    losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = train(batch_size, df_train, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
+    losses, accuracies, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases = train(batch_size, df_train[:1000], df_test, epochs, learning_rate, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
     
     # Plot loss and accuracy over epochs
     plot_loss_accu(epochs, losses, accuracies)
-    print("\nFinal training epoch loss: " + str(losses[-1]))
-    print("Final training epoch accuracy: " + str(accuracies[-1]))
+    print("\nFinal epoch loss: " + str(losses[-1]))
+    print("Final epoch accuracy: " + str(accuracies[-1]))
 
     print("\nRunning test...")
     # accuracy = test(df_test, input_h1_weights, h1_h2_weights, h2_output_weights, h1_biases, h2_biases, output_biases)
