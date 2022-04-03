@@ -37,13 +37,10 @@ def softmax(matrix: np.ndarray) -> np.ndarray:
     return e / col_sum
 
 
-# TODO do this across dimension at once, use mean loss per batch
 # Categorical cross entropy loss function
-def cat_cross_loss(output_matrix: np.ndarray, targets: np.ndarray) -> np.ndarray:
-    loss = 0
-    for col in range(output_matrix.shape[1]):
-        loss -= np.log(output_matrix[targets[0][col], col] + 1e-100)
-    return loss
+def cat_cross_loss(output_matrix: np.ndarray, targets: np.ndarray) -> float:
+    mean_loss = np.mean(-np.log(output_matrix[targets[0], [range(len(targets[0]))]] + 1e-100))
+    return mean_loss
 
 
 # Initialise NN weights to random standard normal values scaled by the size of the layers
@@ -64,7 +61,7 @@ def initialise_biases(h1_size: int, h2_size: int, output_size: int) -> Tuple[np.
 
 
 # Convert a pd df to a numpy array of the data with targets
-def ingest_mnist(df: pd.dataframe, rows: int) -> Tuple[np.ndarray, np.ndarray]:
+def ingest_mnist(df: pd.DataFrame, rows: int) -> Tuple[np.ndarray, np.ndarray]:
     input_matrix = np.array(df.iloc[rows, 1:].values.tolist(), ndmin=2).T / 255
     targets = np.array(df.iloc[rows, 0].values.tolist(), ndmin=2)
     return input_matrix, targets
@@ -242,8 +239,8 @@ def main():
     h2_size = 100
     output_size = 10  # DO NOT CHANGE
     learning_rate = 1e-3
-    batch_size = 60000
-    epochs = 1
+    batch_size = 100
+    epochs = 10
 
     print("Loading data...")
     df_train, df_test = read_data()
