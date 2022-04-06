@@ -60,14 +60,14 @@ def initialise_biases(h1_size: int, h2_size: int, output_size: int) -> Tuple[np.
     return h1_biases, h2_biases, output_biases
 
 
-# Convert a pd df to a numpy array of the data with targets
+# Convert the ubyte pandas df to a numpy array of the data with targets
 def ingest_mnist(df: pd.DataFrame, rows: int) -> Tuple[np.ndarray, np.ndarray]:
-    input_matrix = np.array(df.iloc[rows, 1:].values.tolist(), ndmin=2).T / 255
+    input_matrix = np.array(df.iloc[rows, 1:].values.tolist(), ndmin=2).T / 255 # scales by 255 to normalise to 0-1
     targets = np.array(df.iloc[rows, 0].values.tolist(), ndmin=2)
     return input_matrix, targets
 
 
-# Runs a forward pass using input data (no classification), weights, and biases
+# Runs a forward pass using input data, weights, and biases
 def forward_propagate(
                       input_matrix: np.ndarray,
                       input_h1_weights: np.ndarray,
@@ -77,10 +77,13 @@ def forward_propagate(
                       h2_biases: np.ndarray,
                       output_biases: np.ndarray,
                      ) -> np.ndarray:
-    h1_matrix = relu(np.dot(input_h1_weights, input_matrix) + np.tile(h1_biases, input_matrix.shape[1]))
-    h2_matrix = relu(np.dot(h1_h2_weights, h1_matrix) + np.tile(h2_biases, h1_matrix.shape[1]))
-    output_matrix = softmax(np.dot(h2_output_weights, h2_matrix) + np.tile(output_biases, h2_matrix.shape[1]))
-    return output_matrix
+    h1_z = np.dot(input_h1_weights, input_matrix) + np.tile(h1_biases, input_matrix.shape[1])  # h1_size * batch_size
+    h1_a = relu(h1_z)  # h1_size * batch_size
+    h2_z = np.dot(h1_h2_weights, h1_a) + np.tile(h2_biases, h1_a.shape[1])  # h2_size * batch_size
+    h2_a = relu(h2_z)  # h2_size * batch_size
+    output_z = np.dot(h2_output_weights, h2_a) + np.tile(output_biases, h2_a.shape[1])  # output_size * batch size
+    output_a = softmax(output_z)  # output_size * batch size
+    return output_a, h1_z, h1_a, h2_z, h2_a, output_z
 
 
 # Runs backpropagation
@@ -99,13 +102,15 @@ def backpropagate(
                  ) -> Tuple[np.ndarray, ...]:
     target_matrix = np.eye(10)[targets[0]].T
 
-    # Use forward propagate
-    h1_z = np.dot(input_h1_weights, input_matrix) + np.tile(h1_biases, input_matrix.shape[1])  # h1_size * batch_size
-    h1_a = relu(h1_z)  # h1_size * batch_size
-    h2_z = np.dot(h1_h2_weights, h1_a) + np.tile(h2_biases, h1_a.shape[1])  # h2_size * batch_size
-    h2_a = relu(h2_z)  # h2_size * batch_size
-    output_z = np.dot(h2_output_weights, h2_a) + np.tile(output_biases, h2_a.shape[1])  # output_size * batch size
-    output_a = softmax(output_z)  # output_size * batch size
+    output_a, h1_z, h1_a, h2_z, h2_a = forward_propagate(
+                                                         input_matrix,
+                                                         input_h1_weights,
+                                                         h1_h2_weights,
+                                                         h2_output_weights,
+                                                         h1_biases,
+                                                         h2_biases,
+                                                         output_biases,
+                                                        )[:5]
 
     output_delta_total = np.zeros((1, output_biases.shape[0]))
     h2_delta_total = np.zeros((1, h2_biases.shape[0]))
@@ -114,7 +119,6 @@ def backpropagate(
     h2_delta_a = np.zeros((h2_biases.shape[0], h1_biases.shape[0]))
     h1_delta_a = np.zeros((h1_biases.shape[0], input_matrix.shape[0]))
 
-    # TODO Improve this?
     for col in range(input_matrix.shape[1]):
         output_delta = (output_a[:, [col]] - target_matrix[:, [col]]).T  # 1 * output_size
         h2_delta = (np.dot(output_delta, h2_output_weights) * relu_deriv(h2_z[:, [col]]).T)  # 1 * h2_size
@@ -214,7 +218,7 @@ def test(
                                       h1_biases,
                                       h2_biases,
                                       output_biases,
-                                    )
+                                    )[0]
     loss = cat_cross_loss(output_matrix, targets)
     accuracy = np.sum(np.argmax(output_matrix, axis=0) == targets) / len(df)
     return (loss, accuracy)
@@ -240,7 +244,7 @@ def main():
     output_size = 10  # DO NOT CHANGE
     learning_rate = 1e-3
     batch_size = 100
-    epochs = 10
+    epochs = 5
 
     print("Loading data...")
     df_train, df_test = read_data()
